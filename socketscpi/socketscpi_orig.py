@@ -4,10 +4,6 @@ Author: Morgan Allison, Keysight RF/uW Application Engineer
 This program provides a socket interface to Keysight test equipment.
 It handles sending commands, receiving query results,
 reading/writing binary block data, and checking for errors.
-
-NOTE: This file is a modified version of the original Keysight socketscpi.py file. 
-It was stripped down to be better suited for the mock instrument simulator. 
-Replace this with the original file when using actual instruments.
 """
 
 import warnings
@@ -17,7 +13,7 @@ import ipaddress
 
 
 class SocketInstrument:
-    def __init__(self, ipAddress: str, port: int=5025, timeout: int=10, noDelay: bool=True, globalErrCheck: bool=False):
+    def __init__(self, ipAddress, port=5025, timeout=10, noDelay=True, globalErrCheck=False):
         """
         Open socket connection with settings for instrument control.
 
@@ -30,9 +26,7 @@ class SocketInstrument:
         """
         # Validate IP address (will raise an error if given an invalid address).
         ipaddress.ip_address(ipAddress)
-        self.ipAddress = ipAddress
-        self.port = port
-        
+
         self.globalErrCheck = globalErrCheck
         self.timeout = timeout
 
@@ -50,15 +44,19 @@ class SocketInstrument:
 
         # Get the instrument ID
         self.instId = self.query('*idn?', errCheck=False)
-        print(f'Connected to {self.instId}')
+
         # Enable verbose error checking of instrument supports this
-        # try:
-        #     self.write('syst:err:verbose 1', errCheck=False)
-        #     self.err_check()
-        # except SockInstError:
-        #     pass
+        try:
+            self.write('syst:err:verbose 1', errCheck=False)
+            self.err_check()
+        except SockInstError:
+            pass
 
     def disconnect(self):
+        """DEPRECATED. THIS IS A PASS-THROUGH FUNCTION ONLY."""
+
+        warnings.warn("socketscpi.binblockread() is deprecated. Use socketscpi.query_binary_values() instead.")
+
         return self.close()
 
     def close(self):
@@ -74,21 +72,20 @@ class SocketInstrument:
             cmd (string): Documented SCPI command to be sent to the instrument.
             errCheck (bool): Local error check flag. Auto error checking will only be done if both global and local error checking is enabled.
         """
+
         if not isinstance(cmd, str):
             raise SockInstError('Argument must be a string.')
 
-        # msg = cmd + "\n"
-        msg = f'{cmd}\n'
+        msg = '{}\n'.format(cmd)
         self.socket.send(msg.encode('latin_1'))
-        print(f'write: {cmd}')
         # msg = '{}\n*esr?'.format(cmd)
         # ret = self.query(msg)
         # if (int(ret) != 0):
         #     raise SockInstError('esr non-zero: {}'.format(ret))
 
-        # if errCheck and self.globalErrCheck:
-        #     print(f'WRITE - local: {errCheck}, global: {self.globalErrCheck}, cmd: {cmd}')
-        #     self.err_check()
+        if errCheck and self.globalErrCheck:
+            print(f'WRITE - local: {errCheck}, global: {self.globalErrCheck}, cmd: {cmd}')
+            self.err_check()
 
     def read(self):
         """
@@ -97,15 +94,12 @@ class SocketInstrument:
         Returns (string): Contents of the instrument's output buffer.
         """
 
-        # response = b''
-        # while response[-1:] != b'\n':
-        #     response += self.socket.recv(1024)
-        response = self.socket.recv(1024)
-        # print(f'client recvd: {response}')
+        response = b''
+        while response[-1:] != b'\n':
+            response += self.socket.recv(1024)
 
         # Strip out whitespace and return.
-        result = response.decode('latin_1').strip()
-        return result
+        return response.decode('latin_1').strip()
 
     def query(self, cmd, errCheck=True):
         """
@@ -127,13 +121,11 @@ class SocketInstrument:
         try:
             result = self.read()
         except socket.timeout:
-            pass
-            # self.err_check()
-            
-        print(f'query result: {result}')
-        # if errCheck and self.globalErrCheck:
-        #     print(f'QUERY - local: {errCheck}, global: {self.globalErrCheck}, cmd: {cmd}')
-        #     self.err_check()
+            self.err_check()
+
+        if errCheck and self.globalErrCheck:
+            print(f'QUERY - local: {errCheck}, global: {self.globalErrCheck}, cmd: {cmd}')
+            self.err_check()
 
         return result
 
